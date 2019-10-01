@@ -20,7 +20,7 @@ if ($emails) {
     }
 }
 // Sprungmarke, falls der Spamordner leer ist müssen keine neuen Domains hinzugefügt werden
-if (empty($ar)) {
+if (empty($arr)) {
   goto vergleichen;
 }
 echo "Mails einlesen<br>";print_r($arr);
