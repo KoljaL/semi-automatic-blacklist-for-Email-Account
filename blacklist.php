@@ -1,4 +1,6 @@
 <?php
+$time_start = microtime(true);
+
 $user = '';
 $pass = '';
 $server = '';
@@ -14,17 +16,19 @@ if ($emails) {
     foreach ($emails as $email_number) {
         $header = imap_headerinfo($inbox, $email_number);
         $senderadresse = $header->from[0]->mailbox . "@" . $header->from[0]->host;
-        $arr[] = substr(strstr($senderadresse, '@'), 1);
+        $arr[] = trim(substr(strstr($senderadresse, '@'), 1));
     }
+}
+// Sprungmarke, falls der Spamordner leer ist müssen keine neuen Domains hinzugefügt werden
+if (empty($ar)) {
+  goto vergleichen;
 }
 echo "Mails einlesen<br>";print_r($arr);
 
 // die bestehenden Domains aus der Textdatei einlesen und im Array $dat[] speichern
-// nach dem Auslesen müssen Zeilenumbrüche entfernt werden
 $zeile = file("blacklist.txt");
 for ($i=0;$i < count($zeile); $i++) {
-    $zeile[$i] = str_replace(array(" "), "", $zeile[$i]);
-    $dat[] = $zeile[$i];
+    $dat[] = trim($zeile[$i]);
 }
 echo "<br><br>Datei einlesen<br>";print_r($dat);
 
@@ -36,7 +40,7 @@ echo "<br><br>merge<br>";print_r($dat);
 $dat = array_unique($dat);
 $dat = array_filter($dat);
 $dat = array_values($dat);
-echo "<br><br>unique<br>";print_r($dat);
+echo "<br><br>unique<br>";print_r($dat);echo "<br><br><br>";
 
 // bestehende Datei leeren
 $f=fopen("blacklist.txt", "w+");
@@ -44,38 +48,51 @@ fclose($f);
 
 // Domains in die Datei schreiben
 foreach ($dat as $adr) {
-    file_put_contents("blacklist.txt", $adr, FILE_APPEND);
+    file_put_contents("blacklist.txt", $adr . "\r\n", FILE_APPEND);
 }
 
-// Inbox öffnen, Blacklist Datei öffnen zeilenweise ausesen und Zeilenumbrüche und Leerzeilen entfernen
+// Sprungmarke, falls der Spamordner leer ist müssen keine neuen Domains hinzugefügt werden
+vergleichen:
+// Inbox öffnen, Blacklist Datei öffnen zeilenweise ausesen
 // Ungesehenen Mails durchgehen und Senderdomain mit der Liste aus der Datei abgleichen
-// bei Treffer Mail verschieben, marieren oder löschen
+// bei Treffer Mail marikeren
 $inbox = imap_open('{' . $server . ':' . $port . '}' . $inboxfolder, $user, $pass) or die('Cannot connect...: ' . imap_last_error());
-$lines = file("blacklist.txt");
-foreach ($lines as $line) {
-    $line = str_replace(array("\r\n","\n","\r"," "), "", $line);
+$zeile = file("blacklist.txt");
+foreach ($zeile as $line) {
     $emails = imap_search($inbox, 'Unseen');
-    //echo "<br>";print_r($emails);echo "<br>";
     if ($emails) {
         foreach ($emails as $email_number) {
-            $uid            = imap_uid($inbox, $email_number);
-            $header         = imap_headerinfo($inbox, $email_number);
-            if ($header->from[0]->host == $line) {
-                imap_setflag_full($inbox, $uid, "\\Seen", ST_UID);
-                // imap_clearflag_full($inbox, $uid, "\\Flagged");
-                // imap_mail_move($inbox,$uid,'mySpam');
-                echo $line . "markiert <br>";
-            }
+            $uid = imap_uid($inbox, $email_number);
+            $header = imap_headerinfo($inbox, $email_number);
+            if (trim($header->from[0]->host) == trim($line)) {
+                $marked[] = $uid;
+                echo $line . "markiert <br><br>";
+            } // if host == list
         } // foreach $emails as $email_number
     } // if emials
 } // foreach $lines as $line
 
-// Ordnernamen des Postfaches anzeigenlassen
-// Hilfreich, wenn Mails verschoben werden sollen
-$mailboxes = imap_list($inbox, '{' . $server . ':' . $port . '}', '*');
-echo "<br><br>";
-foreach ($mailboxes as $mailbox) {
-    print $mailbox . "<br>";
+// Markierte Mails bearbeiten
+if ($marked) {
+    foreach ($marked as $mark) {
+        imap_setflag_full($inbox, $mark, "\\Seen", ST_UID);
+        imap_clearflag_full($inbox, $mark, "\\Flagged", ST_UID);
+        imap_mail_move($inbox, $mark, 'mySpam', ST_UID);
+        imap_expunge($inbox);
+    }
 }
 
+
+// Ordnernamen des Postfaches anzeigenlassen
+// Hilfreich, wenn Mails verschoben werden sollen
+// $mailboxes = imap_list($inbox, '{' . $server . ':' . $port . '}', '*');
+// echo "<br><br>";
+// foreach ($mailboxes as $mailbox) {
+//     print $mailbox . "<br>";
+// }
+
 imap_close($inbox, CL_EXPUNGE);
+
+$time = microtime(true) - $time_start;
+
+echo "<br>In $time Sekunden nichts getan\n";
