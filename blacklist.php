@@ -171,8 +171,9 @@ function connectIMAP($server, $port, $folder, $user, $pass) {
 try {
     // Konfiguration laden
     $config = loadConfig();
-    $debug = isset($config['settings']['debug']) && 
-             ($config['settings']['debug'] === true || $config['settings']['debug'] === 'true');
+    // Debug-Modus: parse_ini_file konvertiert 'true'/'false' zu Booleans,
+    // !empty() prüft zusätzlich ob Setting existiert (defensiv)
+    $debug = !empty($config['settings']['debug']) && $config['settings']['debug'];
     
     if ($debug) {
         echo "<h2>🔍 Debug-Modus aktiv</h2>";
@@ -233,6 +234,7 @@ try {
     // ========== SCHRITT 2: Blacklist aktualisieren ==========
     $blacklist_domains = loadBlacklist($debug);
     $original_count = count($blacklist_domains);
+    $original_blacklist = $blacklist_domains; // Für korrekte Vergleiche speichern
     
     if (!empty($new_domains)) {
         if ($debug) {
@@ -261,10 +263,11 @@ try {
             if ($debug) {
                 echo "✅ Blacklist aktualisiert: $new_count Einträge (+" . $added . " neue)<br>";
                 if ($added > 0) {
-                    $truly_new = array_diff($new_domains, array_slice($blacklist_domains, 0, $original_count));
-                    if (!empty($truly_new)) {
-                        echo "🆕 Neue Domains: <pre>" . implode("\n", array_slice($truly_new, 0, 10));
-                        if (count($truly_new) > 10) echo "\n... und " . (count($truly_new) - 10) . " weitere";
+                    // Vergleich gegen ursprüngliche Blacklist vor dem Merge
+                    $newly_added_domains = array_diff($new_domains, $original_blacklist);
+                    if (!empty($newly_added_domains)) {
+                        echo "🆕 Neue Domains: <pre>" . implode("\n", array_slice($newly_added_domains, 0, 10));
+                        if (count($newly_added_domains) > 10) echo "\n... und " . (count($newly_added_domains) - 10) . " weitere";
                         echo "</pre>";
                     }
                 }
@@ -299,7 +302,7 @@ try {
             $config['email']['pass']
         );
         
-        // Ungesehene E-Mails EINMAL abrufen (Performance-Optimierung!)
+        // Ungesehene E-Mails einmal abrufen (Performance-Optimierung!)
         $unseen_emails = imap_search($inbox_connection, 'UNSEEN');
         
         if ($unseen_emails) {
