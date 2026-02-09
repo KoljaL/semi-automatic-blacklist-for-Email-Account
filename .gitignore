@@ -1,0 +1,17 @@
+# Konfigurationsdatei mit Zugangsdaten
+config.ini
+
+# Backup-Dateien
+blacklist.txt.backup
+*.backup
+
+# Editor und IDE Dateien
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System-Dateien
+.DS_Store
+Thumbs.db
